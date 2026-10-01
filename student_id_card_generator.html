@@ -38,6 +38,38 @@
       box-shadow: 0 20px 30px -10px rgba(0, 0, 0, 0.2);
     }
 
+    /* Keep the photo and badge at their intended size in both the browser
+       and html2canvas; flex items otherwise shrink when text/font metrics vary. */
+    #cardHeader,
+    #cardPhotoSection,
+    #cardBadge,
+    #cardFooter {
+      flex-shrink: 0;
+    }
+
+    #cardBadge {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      box-sizing: border-box;
+      height: 20px;
+      min-height: 20px;
+      padding: 0 12px;
+      line-height: 20px;
+      white-space: nowrap;
+      overflow: visible;
+    }
+
+    #cardPhotoSection > div {
+      width: 112px;
+      height: 112px;
+      flex: none;
+    }
+
+    #cardDetails {
+      min-height: 0;
+    }
+
     /* Print styles to focus on printable area */
     @media print {
       body * {
@@ -282,7 +314,7 @@
             </div>
 
             <!-- Profile Photo Section -->
-            <div class="relative -mt-11 self-center z-10">
+            <div id="cardPhotoSection" class="relative -mt-11 self-center z-10">
               <div class="w-28 h-28 rounded-full bg-slate-100 border-4 border-white shadow-md overflow-hidden flex justify-center items-center">
                 <img id="cardPhotoImg" src="" alt="Student Profile" class="w-full h-full object-cover hidden">
                 <div id="cardPhotoFallback" class="flex justify-center items-center w-full h-full bg-slate-200 text-slate-400">
@@ -297,7 +329,7 @@
             </div>
 
             <!-- Details Container -->
-            <div class="px-6 py-2 flex-grow flex flex-col justify-center">
+            <div id="cardDetails" class="px-6 py-2 flex-grow flex flex-col justify-center">
               
               <h4 id="cardName" class="text-center text-xl font-extrabold text-slate-800 leading-tight">
                 Hassan Ali
@@ -328,7 +360,7 @@
             </div>
 
             <!-- Footer Barcode & Validity -->
-            <div class="px-6 py-2 bg-slate-50 border-t border-dashed border-slate-200 flex flex-col items-center">
+            <div id="cardFooter" class="px-6 py-2 bg-slate-50 border-t border-dashed border-slate-200 flex flex-col items-center">
               <div id="cardBarcode" class="font-barcode text-4xl text-slate-800 leading-none h-8 overflow-hidden align-top" style="line-height: 0.8;">CSR-2026-001</div>
               <p class="text-[10px] font-medium text-slate-500">
                 Valid Session: <span id="cardValidity" class="font-bold text-slate-700">2026 - 2030</span>
@@ -505,7 +537,7 @@
       });
 
       // --- Download ID Card as PNG via html2canvas ---
-      downloadBtn.addEventListener('click', () => {
+      downloadBtn.addEventListener('click', async () => {
         const cardElement = document.getElementById('idCard');
 
         // Temporary status text on download button
@@ -513,29 +545,67 @@
         downloadBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Generating PNG...`;
         downloadBtn.disabled = true;
 
-        html2canvas(cardElement, {
-          scale: 2.5, // optimal resolution for printing/viewing while avoiding canvas limit bugs
-          width: 340,
-          height: 540,
-          useCORS: true,
-          backgroundColor: '#ffffff',
-          logging: false
-        }).then(canvas => {
+        try {
+          // Match the export to the card's rendered box. Hard-coded capture dimensions
+          // can clip flex content when browser font metrics differ from the PNG render.
+          if (document.fonts && document.fonts.ready) {
+            await document.fonts.ready;
+          }
+          const bounds = cardElement.getBoundingClientRect();
+          const cardStyle = getComputedStyle(cardElement);
+          const borderLeft = parseFloat(cardStyle.borderLeftWidth) || 0;
+          const borderTop = parseFloat(cardStyle.borderTopWidth) || 0;
+          const sectionIds = ['cardHeader', 'cardPhotoSection', 'cardBadge', 'cardDetails', 'cardFooter'];
+          const sectionBounds = sectionIds.map(id => {
+            const rect = document.getElementById(id).getBoundingClientRect();
+            return {
+              id,
+              left: rect.left - bounds.left - borderLeft,
+              top: rect.top - bounds.top - borderTop,
+              width: rect.width,
+              height: rect.height
+            };
+          });
+          const canvas = await html2canvas(cardElement, {
+            scale: 2.5,
+            width: Math.ceil(bounds.width),
+            height: Math.ceil(bounds.height),
+            windowWidth: document.documentElement.clientWidth,
+            windowHeight: document.documentElement.clientHeight,
+            useCORS: true,
+            backgroundColor: '#ffffff',
+            logging: false,
+            onclone: clonedDocument => {
+              const clonedCard = clonedDocument.getElementById('idCard');
+              // html2canvas can recalculate flex sizing differently in its clone.
+              // Pin each card section to its actual browser-preview position.
+              clonedCard.style.setProperty('display', 'block', 'important');
+              clonedCard.style.setProperty('position', 'relative', 'important');
+              sectionBounds.forEach(({ id, left, top, width, height }) => {
+                const section = clonedDocument.getElementById(id);
+                section.style.setProperty('position', 'absolute', 'important');
+                section.style.setProperty('box-sizing', 'border-box', 'important');
+                section.style.setProperty('left', `${left}px`, 'important');
+                section.style.setProperty('top', `${top}px`, 'important');
+                section.style.setProperty('width', `${width}px`, 'important');
+                section.style.setProperty('height', `${height}px`, 'important');
+                section.style.setProperty('margin', '0', 'important');
+                section.style.setProperty('flex', 'none', 'important');
+              });
+            }
+          });
           const link = document.createElement('a');
           const studentNameFormatted = (inputStudentName.value || 'Student').replace(/\s+/g, '_');
           link.download = `${studentNameFormatted}_ID_Card.png`;
           link.href = canvas.toDataURL('image/png');
           link.click();
-
-          // Restore button
-          downloadBtn.innerHTML = originalContent;
-          downloadBtn.disabled = false;
-        }).catch(err => {
+        } catch (err) {
           console.error("Card generation failed:", err);
           alert("Could not render image. Please try again.");
+        } finally {
           downloadBtn.innerHTML = originalContent;
           downloadBtn.disabled = false;
-        });
+        }
       });
 
       // --- Print Button Action ---
