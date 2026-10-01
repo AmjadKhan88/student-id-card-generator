@@ -2,7 +2,7 @@
 
 A lightweight, browser-based student ID card generator for creating, previewing, printing, and downloading professional-looking student identification cards as PNG images.
 
-![Student ID Card Generator preview](https://placehold.co/1200x700/1e3a8a/ffffff?text=Student+ID+Card+Generator+Preview)
+![Student ID Card Generator preview](https://github.com/AmjadKhan88/student-id-card-generator/blob/main/thumbnail.jpg?raw=true)
 
 > **Preview image placeholder:** Replace the image URL above with your actual thumbnail or screenshot when it is ready.
 
